@@ -1,110 +1,241 @@
-def getQuantityState(quantity):
-    if quantity is not None:
-        quantity_obj = hass.states.get(quantity)
-        if quantity_obj:
-            return quantity_obj.state
-    return None
+import math
+import time
 
-def getStatusState(status):
-    return getQuantityState(status)
+from pidController import PIDController
 
-def getPitchState(pitch):
-    return getQuantityState(pitch)
+DEVICE_NAME_PREFIX = "esp32_solar_control_"
+ONE_AXIS_ID = "1_axis"
+TWO_AXIS_ID = "2_axis"
 
-def isSolarControllerConnected(status):
-    if status == 'on':
-        return True
-    else:
-        return False
+TIMEOUT = 15 # s
 
-def waitUntilPitchReached():
-    pass
+PITCH_MAX = 70
+PITCH_MIN = 30
+PITCH_DIFFERENCE_MAX = PITCH_MAX - PITCH_MIN
 
-def waitUntilRollReached():
-    pass
+ROLL_MAX = 30
+ROLL_MIN = -30
+ROLL_DIFFERENCE_MAX = ROLL_MAX - ROLL_MIN
 
-def switchOnUp():
-    service_data = {"entity_id": "switch.esp32_solar_control_1_axis_up"}
-    hass.services.call("switch", "turn_on", service_data, False)
+SPEED_MAX = 70
+SPEED_MIN = 45
+SPEED_DIFFERENCE_MAX = SPEED_MAX - SPEED_MIN
 
-def switchOnDown():
-    service_data = {"entity_id": "switch.esp32_solar_control_1_axis_down"}
-    hass.services.call("switch", "turn_on", service_data, False)
-
-def switchOffUp():
-    service_data = {"entity_id": "switch.esp32_solar_control_1_axis_up"}
-    hass.services.call("switch", "turn_off", service_data, False)
-
-def switchOffDown():
-    service_data = {"entity_id": "switch.esp32_solar_control_1_axis_down"}
-    hass.services.call("switch", "turn_off", service_data, False)
-
-def setUpDownSpeed(speed):
-    speed = int(speed*1.0 / 100 * 256)
-    service_data = {"entity_id": "light.esp32_solar_control_1_axis_speed_up_down", "brightness": speed}
-    hass.services.call("light", "turn_on", service_data, False)
+def clamp(n, minn, maxn):
+    return max(min(maxn, n), minn)
 
 class SolarController:
-    def __init__(self, name, status, pitch):
-        self.name = name
-        self.status = status
-        self.pitch = pitch
+    def __init__(self, hass):
+        self.hass = hass
+        self.controllerEntityIdBase = None
+        self.statusEntityId = None
+        self.pitchEntityId = None
+        self.rollEntityId = None
+        self.switchUpEntityId = None
+        self.switchDownEntityId = None
+        self.switchEastEntityId = None
+        self.switchWestEntityId = None
+        self.lightSpeedUpDownEntityId = None
+        self.lightSpeedEastWestEntityId = None
 
-def getSolarControllerFromInput():
-    name = data.get("solar_controller_name") # "1-axis" or "2-axis"
+        self.pidController = PIDController(Kp=1.0, Ki=0.0, Kd=0.0, setpoint=0)
 
-    if name == ONE_AXIS_ID or name == TWO_AXIS_ID:
-        logger.debug(f"Solar controller name is {name}")
-        status = "binary_sensor." + DEVICE_NAME_PREFIX + name + "_status"
-        pitch = "sensor." + DEVICE_NAME_PREFIX + name + "_mpu6050_pitch"
-        return SolarController(name, status, pitch)
-    else:
-        logger.error(f"Solar controller {name} is not valid")
+    def getSolarControllerEntityID(self, controllerName):
+        if controllerName == ONE_AXIS_ID or controllerName == TWO_AXIS_ID:
+            self.controllerEntityIdBase = DEVICE_NAME_PREFIX + controllerName
+            self.statusEntityId = "binary_sensor." + self.controllerEntityIdBase + "_status"
+            self.pitchEntityId = "sensor." + self.controllerEntityIdBase + "_mpu6050_pitch"
+            self.rollEntityId = "sensor." + self.controllerEntityIdBase + "_mpu6050_roll"
+            self.switchUpEntityId   = "switch." + self.controllerEntityIdBase + "_up"
+            self.switchDownEntityId = "switch." + self.controllerEntityIdBase + "_down"
+            self.switchEastEntityId   = "switch." + self.controllerEntityIdBase + "_east"
+            self.switchWestEntityId   = "switch." + self.controllerEntityIdBase + "_west"
+            self.lightSpeedUpDownEntityId = "light." + self.controllerEntityIdBase + "_speed_up_down"
+            self.lightSpeedEastWestEntityId = "light." + self.controllerEntityIdBase + "_speed_east_west"
+        else:
+            self.hass.log(f"Solar controller {controllerName} is not valid")
+
+    def isSolarControllerConnected(self, status):
+        if status == 'on':
+            return True
+        else:
+            return False
+
+    def getQuantity(self, entityId):
+        if entityId is not None:
+            entityId = self.hass.get_state(entityId)
+            return entityId
         return None
 
-TIMEOUT = 10 # s
-DEVICE_NAME_PREFIX = "esp32_solar_control_"
+    def getStatus(self, status):
+        return self.getQuantity(status)
 
-ONE_AXIS_ID = "1-axis"
-TWO_AXIS_ID = "2-axis"
+    def getPitch(self, pitch):
+        return self.getQuantity(pitch)
 
-PITCH_HYSTERESIS_UPPER = 3.0
-PITCH_HYSTERESIS_LOWER = 0.5
+    def getRoll(self, roll):
+        return self.getQuantity(roll)
 
-sc = getSolarControllerFromInput()
+    def getSunElevation(self):
+        return self.getQuantity("sensor.sun_elevation")
 
-solar_controller_status_state = getStatusState(sc.status)
-solar_controller_pitch_state = None
+    def getSunAzimuth(self):
+        return self.getQuantity("sensor.sun_azimuth")
 
-if isSolarControllerConnected(solar_controller_status_state):
-    solar_controller_pitch_state = getPitchState(sc.pitch)
-    logger.warning(f"Solar controller {sc.pitch} is: {solar_controller_pitch_state}")
-    
-    pitch = float(solar_controller_pitch_state)
-    
-    timeout = TIMEOUT
-    if pitch > 0.0:
-        switchOnUp()
-        setUpDownSpeed(50)
-        while (pitch > 0.0 and timeout > 0):
-            pitch = float(getPitchState(sc.pitch))
-            time.sleep(1)
-            timeout = timeout - 1
-            logger.warning("Positive pitch now negative")
-        switchOffUp()
-        setUpDownSpeed(0)
-    
-    elif pitch < 0.0:
-        switchOnDown()
-        setUpDownSpeed(50)
-        while (pitch < 0.0 and timeout > 0):
-            pitch = float(getPitchState(sc.pitch))
-            time.sleep(1)
-            timeout = timeout - 1
-            logger.warning("Negative pitch now positive")
-        switchOffDown()
-        setUpDownSpeed(0)
-else:
-    logger.warning(f"Solar controller {solar_controller_name} is {solar_controller_status_state}")
+    def switchOnUp(self):
+        if self.hass.get_state(self.switchUpEntityId) == "off":
+            self.hass.log(f"Switch on {self.switchUpEntityId}")
+            self.hass.call_service("switch/turn_on", entity_id=self.switchUpEntityId)
 
+    def switchOnDown(self):
+        if self.hass.get_state(self.switchDownEntityId) == "off":
+            self.hass.log(f"Switch on {self.switchDownEntityId}")
+            self.hass.call_service("switch/turn_on", entity_id=self.switchDownEntityId)
 
+    def switchOffUp(self):
+        if self.hass.get_state(self.switchUpEntityId) == "on":
+            self.hass.log(f"Switch off {self.switchUpEntityId}")
+            self.hass.call_service("switch/turn_off", entity_id=self.switchUpEntityId)
+
+    def switchOffDown(self):
+        if self.hass.get_state(self.switchDownEntityId) == "on":
+            self.hass.log(f"Switch off {self.switchDownEntityId}")
+            self.hass.call_service("switch/turn_off", entity_id=self.switchDownEntityId)
+
+    def switchOnEast(self):
+        if self.hass.get_state(self.switchEastEntityId) == "off":
+            self.hass.log(f"Switch on {self.switchEastEntityId}")
+            self.hass.call_service("switch/turn_on", entity_id=self.switchEastEntityId)
+
+    def switchOnWest(self):
+        if self.hass.get_state(self.switchWestEntityId) == "off":
+            self.hass.log(f"Switch on {self.switchWestEntityId}")
+            self.hass.call_service("switch/turn_on", entity_id=self.switchWestEntityId)
+
+    def switchOffEast(self):
+        if self.hass.get_state(self.switchEastEntityId) == "on":
+            self.hass.log(f"Switch off {self.switchEastEntityId}")
+            self.hass.call_service("switch/turn_off", entity_id=self.switchEastEntityId)
+
+    def switchOffWest(self):
+        if self.hass.get_state(self.switchWestEntityId) == "on":
+            self.hass.log(f"Switch off {self.switchWestEntityId}")
+            self.hass.call_service("switch/turn_off", entity_id=self.switchWestEntityId)
+
+    def setUpDownSpeed(self, speed):
+        speed = clamp(int(speed*1.0 / 100 * 256), 0, 256)
+        self.hass.log(f"Set speed of {self.lightSpeedUpDownEntityId} with {speed}")
+        self.hass.call_service("light/turn_on", entity_id=self.lightSpeedUpDownEntityId, brightness=speed)
+
+    def setEastWestSpeed(self, speed):
+        speed = clamp(int(speed*1.0 / 100 * 256), 0, 256)
+        self.hass.log(f"Set speed of {self.lightSpeedEastWestEntityId} with {speed}")
+        self.hass.call_service("light/turn_on", entity_id=self.lightSpeedEastWestEntityId, brightness=speed)
+
+    def isPositionTooLow(self):
+        return self.getPitchDifference() > 0
+
+    def isPositionTooHigh(self):
+        return self.getPitchDifference() < 0
+
+    def isPositionTooEast(self):
+        return self.getRollDifference() > 0
+
+    def isPositionTooWest(self):
+        return self.getRollDifference() < 0
+
+    def getPitchDifference(self):
+        sunElevation = float(self.getSunElevation())
+        pitch = float(self.getPitch(self.pitchEntityId))
+        difference = sunElevation - pitch
+
+        return difference
+
+    def getRollDifference(self):
+        sunAzimuth = float(self.getSunAzimuth())
+        roll = float(self.getRoll(self.rollEntityId))
+        difference = sunAzimuth - roll
+
+        return difference
+
+    def isPitchDifferenceTooHigh(self):
+        sunElevation = float(self.getSunElevation())
+        pitch = float(self.getPitch(self.pitchEntityId))
+        difference = sunElevation - pitch
+
+        self.hass.log("Diff=Elevation-Pitch: {:.2f}={:.2f}-{:.2f}".format(difference, sunElevation, pitch))
+
+        return math.fabs(difference) > 3.0
+
+    def isRollDifferenceTooHigh(self):
+        sunAzimuth = float(self.getSunAzimuth())
+        roll = float(self.getRoll(self.rollEntityId))
+        difference = sunAzimuth - roll
+
+        self.hass.log("Diff=Azimuth-Roll: {:.2f}={:.2f}-{:.2f}".format(difference, sunAzimuth, roll))
+
+        return math.fabs(difference) > 3.0
+
+    def moveUpDown(self, controllerName):
+
+        self.getSolarControllerEntityID(controllerName)
+        status = self.getStatus(self.statusEntityId)
+
+        if self.isSolarControllerConnected(status):
+            timeout = TIMEOUT
+            updatePeriod = 1 # s
+
+            while self.isPitchDifferenceTooHigh() and timeout > 0:
+                control = self.pidController.update(measurement=self.getPitchDifference(), dt=updatePeriod)
+                speed = abs(control/PITCH_DIFFERENCE_MAX) * SPEED_DIFFERENCE_MAX + SPEED_MIN
+
+                if self.isPositionTooLow():
+                    self.switchOnUp()
+                elif self.isPositionTooHigh():
+                    self.switchOnDown()
+
+                self.setUpDownSpeed(speed)
+
+                time.sleep(updatePeriod)
+                timeout = timeout - 1
+
+            self.switchOffUp()
+            self.switchOffDown()
+            self.setUpDownSpeed(0)
+
+            self.hass.log("{} pitch is justified diff={:.2f}".format(controllerName, self.getPitchDifference()))
+
+        else:
+            self.hass.log(f"Solar controller {solar_controller_name} is {solar_controller_status_state}")
+
+    def moveEastWest(self, controllerName):
+
+        self.getSolarControllerEntityID(controllerName)
+        status = self.getStatus(self.statusEntityId)
+
+        if self.isSolarControllerConnected(status):
+            timeout = TIMEOUT
+            updatePeriod = 1 # s
+
+            while self.isRollDifferenceTooHigh() and timeout > 0:
+                control = self.pidController.update(measurement=self.getRollDifference(), dt=updatePeriod)
+                speed = abs(control/ROLL_DIFFERENCE_MAX) * SPEED_DIFFERENCE_MAX + SPEED_MIN
+
+                if self.isPositionTooEast():
+                    self.switchOnWest()
+                elif self.isPositionTooWest():
+                    self.switchOnEast()
+
+                self.setEastWestSpeed(speed)
+
+                time.sleep(updatePeriod)
+                timeout = timeout - 1
+
+            self.switchOffEast()
+            self.switchOffWest()
+            self.setEastWestSpeed(0)
+
+            self.hass.log("{} roll is justified diff={:.2f}".format(controllerName, self.getRollDifference()))
+
+        else:
+            self.hass.log(f"Solar controller {solar_controller_name} is {solar_controller_status_state}")
