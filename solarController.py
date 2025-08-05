@@ -2,12 +2,13 @@ import math
 import time
 
 from pidController import PIDController
+from steadyState import SteadyState
 
 DEVICE_NAME_PREFIX = "esp32_solar_control_"
 ONE_AXIS_ID = "1_axis"
 TWO_AXIS_ID = "2_axis"
 
-TIMEOUT = 30 # s
+TIMEOUT = 60 # s
 
 PITCH_MAX = 64 # Down
 PITCH_MIN = 27 # Up
@@ -40,6 +41,9 @@ class SolarController:
         self.lightSpeedEastWestEntityId = None
 
         self.pidController = PIDController(Kp=1.0, Ki=0.0, Kd=0.0, setpoint=0)
+
+        self.pitchSteadyState = SteadyState()
+        self.rollSteadyState = SteadyState()
 
     def getSolarControllerEntityID(self, controllerName):
         if controllerName == ONE_AXIS_ID or controllerName == TWO_AXIS_ID:
@@ -167,7 +171,8 @@ class SolarController:
         return difference
 
     def getRollDifference(self):
-        sunAzimuth = float(self.getSunAzimuth())
+        sunAzimuth = float(self.getSunAzimuth()) - 180
+        self.hass.log("Azimuth {:.2f}".format(sunAzimuth))
         sunAzimuth = clamp(sunAzimuth, ROLL_MIN, ROLL_MAX)
         roll = float(self.getRoll(self.rollEntityId))
         difference = sunAzimuth - roll
@@ -191,7 +196,13 @@ class SolarController:
             updatePeriod = 1 # s
 
             while self.isPitchDifferenceTooHigh() and timeout > 0:
-                control = self.pidController.update(measurement=self.getPitchDifference(), dt=updatePeriod)
+                currentPitchDifference = self.getPitchDifference()
+
+                if (self.pitchSteadyState.addValue(currentPitchDifference)):
+                    self.hass.log("U/D Position is steady")
+                    break
+
+                control = self.pidController.update(measurement=currentPitchDifference, dt=updatePeriod)
                 speed = abs(control/PITCH_DIFFERENCE_MAX) * SPEED_DIFFERENCE_MAX + SPEED_MIN
 
                 if self.isPositionTooLow():
@@ -218,8 +229,10 @@ class SolarController:
             self.switchOffDown()
             self.setUpDownSpeed(0)
 
-            self.hass.log("{} pitch is justified diff={:.2f}".format(controllerName, self.getPitchDifference()))
-
+            if timeout != 0:
+                self.hass.log("{} pitch is justified diff={:.2f}".format(controllerName, self.getPitchDifference()))
+            else:
+                self.hass.log("{} timeout diff={:.2f}".format(controllerName, self.getPitchDifference()))
         else:
             self.hass.log(f"Solar controller {solar_controller_name} is {solar_controller_status_state}")
 
@@ -234,7 +247,13 @@ class SolarController:
             updatePeriod = 1 # s
 
             while self.isRollDifferenceTooHigh() and timeout > 0:
-                control = self.pidController.update(measurement=self.getRollDifference(), dt=updatePeriod)
+                currentRollDifference = self.getRollDifference()
+
+                if (self.rollSteadyState.addValue(currentRollDifference)):
+                    self.hass.log("E/W Position is steady")
+                    break
+
+                control = self.pidController.update(measurement=currentRollDifference, dt=updatePeriod)
                 speed = abs(control/ROLL_DIFFERENCE_MAX) * SPEED_DIFFERENCE_MAX + SPEED_MIN
 
                 if self.isPositionTooEast():
@@ -260,7 +279,10 @@ class SolarController:
             self.switchOffWest()
             self.setEastWestSpeed(0)
 
-            self.hass.log("{} roll is justified diff={:.2f}".format(controllerName, self.getRollDifference()))
+            if timeout != 0:
+                self.hass.log("{} roll is justified diff={:.2f}".format(controllerName, self.getRollDifference()))
+            else:
+                self.hass.log("{} timeout diff={:.2f}".format(controllerName, self.getRollDifference()))
 
         else:
             self.hass.log(f"Solar controller {solar_controller_name} is {solar_controller_status_state}")
