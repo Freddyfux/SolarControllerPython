@@ -7,18 +7,19 @@ DEVICE_NAME_PREFIX = "esp32_solar_control_"
 ONE_AXIS_ID = "1_axis"
 TWO_AXIS_ID = "2_axis"
 
-TIMEOUT = 15 # s
+TIMEOUT = 30 # s
 
-PITCH_MAX = 70
-PITCH_MIN = 30
+PITCH_MAX = 64 # Down
+PITCH_MIN = 27 # Up
 PITCH_DIFFERENCE_MAX = PITCH_MAX - PITCH_MIN
 
-ROLL_MAX = 30
-ROLL_MIN = -30
+ROLL_MAX = 34  # East
+ROLL_MIN = -19 # West
 ROLL_DIFFERENCE_MAX = ROLL_MAX - ROLL_MIN
 
-SPEED_MAX = 70
-SPEED_MIN = 45
+SPEED_DOWN_FACTOR = 0.85
+SPEED_MAX = 65
+SPEED_MIN = 50
 SPEED_DIFFERENCE_MAX = SPEED_MAX - SPEED_MIN
 
 def clamp(n, minn, maxn):
@@ -144,37 +145,41 @@ class SolarController:
     def isPositionTooWest(self):
         return self.getRollDifference() < 0
 
+    def isPositionMaxUp(self):
+        return float(self.getPitch(self.pitchEntityId)) < PITCH_MIN
+
+    def isPositionMaxDown(self):
+        return float(self.getPitch(self.pitchEntityId)) > PITCH_MAX
+
+    def isPositionMaxEast(self):
+        return float(self.getRoll(self.rollEntityId)) > ROLL_MAX
+
+    def isPositionMaxWest(self):
+        return float(self.getRoll(self.rollEntityId)) < ROLL_MIN
+
     def getPitchDifference(self):
         sunElevation = float(self.getSunElevation())
-        pitch = float(self.getPitch(self.pitchEntityId))
+        sunElevation = clamp(sunElevation, PITCH_MIN, PITCH_MAX)
+        pitch = 90 - float(self.getPitch(self.pitchEntityId))
         difference = sunElevation - pitch
+        self.hass.log("Diff=Elevation-Pitch: {:.2f}={:.2f}-{:.2f}".format(difference, sunElevation, pitch))
 
         return difference
 
     def getRollDifference(self):
         sunAzimuth = float(self.getSunAzimuth())
+        sunAzimuth = clamp(sunAzimuth, ROLL_MIN, ROLL_MAX)
         roll = float(self.getRoll(self.rollEntityId))
         difference = sunAzimuth - roll
+        self.hass.log("Diff=Azimuth-Roll: {:.2f}={:.2f}-{:.2f}".format(difference, sunAzimuth, roll))
 
         return difference
 
     def isPitchDifferenceTooHigh(self):
-        sunElevation = float(self.getSunElevation())
-        pitch = float(self.getPitch(self.pitchEntityId))
-        difference = sunElevation - pitch
-
-        self.hass.log("Diff=Elevation-Pitch: {:.2f}={:.2f}-{:.2f}".format(difference, sunElevation, pitch))
-
-        return math.fabs(difference) > 3.0
+        return math.fabs(self.getPitchDifference()) > 3.0
 
     def isRollDifferenceTooHigh(self):
-        sunAzimuth = float(self.getSunAzimuth())
-        roll = float(self.getRoll(self.rollEntityId))
-        difference = sunAzimuth - roll
-
-        self.hass.log("Diff=Azimuth-Roll: {:.2f}={:.2f}-{:.2f}".format(difference, sunAzimuth, roll))
-
-        return math.fabs(difference) > 3.0
+        return math.fabs(self.getRollDifference()) > 3.0
 
     def moveUpDown(self, controllerName):
 
@@ -190,9 +195,19 @@ class SolarController:
                 speed = abs(control/PITCH_DIFFERENCE_MAX) * SPEED_DIFFERENCE_MAX + SPEED_MIN
 
                 if self.isPositionTooLow():
+                    if (self.isPositionMaxUp()):
+                        self.hass.log("Position is up at maximum")
+                        break
                     self.switchOnUp()
-                elif self.isPositionTooHigh():
+                elif self.isPositionTooHigh() and not isPositionMaxDown:
+                    if (self.isPositionMaxDown()):
+                        self.hass.log("Position is down at maximum")
+                        break
                     self.switchOnDown()
+                    speed = speed * SPEED_DOWN_FACTOR
+                else:
+                    self.hass.log("U/D Position settled")
+                    break
 
                 self.setUpDownSpeed(speed)
 
@@ -208,6 +223,7 @@ class SolarController:
         else:
             self.hass.log(f"Solar controller {solar_controller_name} is {solar_controller_status_state}")
 
+
     def moveEastWest(self, controllerName):
 
         self.getSolarControllerEntityID(controllerName)
@@ -222,9 +238,18 @@ class SolarController:
                 speed = abs(control/ROLL_DIFFERENCE_MAX) * SPEED_DIFFERENCE_MAX + SPEED_MIN
 
                 if self.isPositionTooEast():
+                    if self.isPositionMaxWest():
+                        self.hass.log("Position is West at maximum")
+                        break
                     self.switchOnWest()
                 elif self.isPositionTooWest():
+                    if self.isPositionMaxEast():
+                        self.hass.log("Position is East at maximum")
+                        break
                     self.switchOnEast()
+                else:
+                    self.hass.log("E/W Position settled")
+                    break
 
                 self.setEastWestSpeed(speed)
 
