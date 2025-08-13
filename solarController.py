@@ -210,7 +210,7 @@ class SolarController:
                         self.hass.log("Position is up at maximum")
                         break
                     self.switchOnUp()
-                elif self.isPositionTooHigh() and not isPositionMaxDown:
+                elif self.isPositionTooHigh() and not self.isPositionMaxDown():
                     if (self.isPositionMaxDown()):
                         self.hass.log("Position is down at maximum")
                         break
