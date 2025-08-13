@@ -1,6 +1,8 @@
 import math
 import time
 
+from constantsAndDefines import UpDownPosition
+from constantsAndDefines import EastWestPosition
 from pidController import PIDController
 from steadyState import SteadyState
 

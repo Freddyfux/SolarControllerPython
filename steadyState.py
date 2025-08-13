@@ -1,7 +1,7 @@
 from collections import deque
 
 class SteadyState:
-    def __init__(self, size=10, tolerance=1.0):
+    def __init__(self, size=15, tolerance=0.25):
         self.size = size
         self.tolerance = tolerance
         self.buffer = deque(maxlen=size)
