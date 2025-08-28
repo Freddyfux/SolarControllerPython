@@ -95,6 +95,30 @@ class SolarController:
     def getSunAzimuth(self):
         return self.getQuantity("sensor.sun_azimuth")
 
+    def isBeforeNoon(self):
+        return float(self.getSunAzimuth()) < 180
+
+    def isUpMovementAllowed(self, upDownPosition):
+        if UpDownPosition.Protect == upDownPosition:
+            return true
+        else:
+            return self.isBeforeNoon()
+
+    def isDownMovementAllowed(self, upDownPosition):
+        if UpDownPosition.Protect == upDownPosition:
+            return true
+        else:
+            return not self.isBeforeNoon()
+
+    def isEastMovementAllowed(self, eastWestPosition):
+        if EastWestPosition.Protect == eastWestPosition:
+            return true
+        else:
+            return false
+
+    def isWestMovementAllowed(self, eastWestPosition):
+        return true
+
     def switchOnUp(self):
         if self.hass.get_state(self.switchUpEntityId) == "off":
             self.hass.log(f"Switch on {self.switchUpEntityId}")
@@ -224,13 +248,13 @@ class SolarController:
                 if (abs(control) < PID_CONTROLLER_THRESHOLD):
                     speed = abs(control/PID_CONTROLLER_THRESHOLD) * SPEED_DIFFERENCE_MAX_WITHIN_THRESHOLD + SPEED_MIN
 
-                if self.isPositionTooLow(upDownPosition):
+                if self.isPositionTooLow(upDownPosition) and self.isUpMovementAllowed(upDownPosition):
                     if (self.isPositionMaxUp()):
                         self.hass.log("Position is up at maximum")
                         break
                     self.switchOnUp()
                     self.hass.log("Move up")
-                elif self.isPositionTooHigh(upDownPosition) and not self.isPositionMaxDown():
+                elif self.isPositionTooHigh(upDownPosition) and not self.isPositionMaxDown() and self.isDownMovementAllowed(upDownPosition):
                     if (self.isPositionMaxDown()):
                         self.hass.log("Position is down at maximum")
                         break
@@ -279,14 +303,14 @@ class SolarController:
                 if (abs(control) < PID_CONTROLLER_THRESHOLD):
                    speed = abs(control/PID_CONTROLLER_THRESHOLD) * SPEED_DIFFERENCE_MAX_WITHIN_THRESHOLD + SPEED_MIN
 
-                if self.isPositionTooEast(eastWestPosition):
+                if self.isPositionTooEast(eastWestPosition) and self.isWestMovementAllowed(eastWestPosition):
                     if self.isPositionMaxWest():
                         self.hass.log("Position is West at maximum")
                         break
                     self.switchOnWest()
                     self.hass.log("Move west")
                     speed = speed * SPEED_WEST_FACTOR
-                elif self.isPositionTooWest(eastWestPosition):
+                elif self.isPositionTooWest(eastWestPosition) and self.isEastMovementAllowed(eastWestPosition):
                     if self.isPositionMaxEast():
                         self.hass.log("Position is East at maximum")
                         break
