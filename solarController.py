@@ -1,35 +1,15 @@
 import math
 import time
 
-from constantsAndDefines import UpDownPosition
-from constantsAndDefines import EastWestPosition
+from constantsAndDefines import (
+    UpDownPosition,
+    EastWestPosition,
+    Constants,
+    ControllerID
+)
+
 from pidController import PIDController
 from steadyState import SteadyState
-
-DEVICE_NAME_PREFIX = "esp32_solar_control_"
-ONE_AXIS_ID = "1_axis"
-TWO_AXIS_ID = "2_axis"
-
-TIMEOUT = 90 # s
-
-PITCH_MAX = 64 # Down
-PITCH_MIN = 27 # Up
-PITCH_DIFFERENCE_MAX = PITCH_MAX - PITCH_MIN
-
-ROLL_MAX = 34  # East
-ROLL_MIN = -19 # West
-ROLL_DIFFERENCE_MAX = ROLL_MAX - ROLL_MIN
-
-SPEED_DOWN_FACTOR = 0.85
-SPEED_WEST_FACTOR = 1.1
-SPEED_MAX = 70
-SPEED_MIN = 45
-SPEED_DIFFERENCE_MAX = SPEED_MAX - SPEED_MIN
-SPEED_MAX_WITHIN_THRESHOLD = 55
-SPEED_DIFFERENCE_MAX_WITHIN_THRESHOLD = SPEED_MAX_WITHIN_THRESHOLD - SPEED_MIN
-
-PID_CONTROLLER_THRESHOLD = 15
-UPDATE_PERIOD = 0.25
 
 def clamp(n, minn, maxn):
     return max(min(maxn, n), minn)
@@ -54,8 +34,8 @@ class SolarController:
         self.rollSteadyState = SteadyState()
 
     def getSolarControllerEntityID(self, controllerName):
-        if controllerName == ONE_AXIS_ID or controllerName == TWO_AXIS_ID:
-            self.controllerEntityIdBase = DEVICE_NAME_PREFIX + controllerName
+        if controllerName == ControllerID.ONE_AXIS_ID or controllerName == ControllerID.TWO_AXIS_ID:
+            self.controllerEntityIdBase = Constants.DEVICE_NAME_PREFIX + controllerName
             self.statusEntityId = "binary_sensor." + self.controllerEntityIdBase + "_status"
             self.pitchEntityId = "sensor." + self.controllerEntityIdBase + "_mpu6050_pitch"
             self.rollEntityId = "sensor." + self.controllerEntityIdBase + "_mpu6050_roll"
@@ -182,24 +162,24 @@ class SolarController:
         return self.getRollDifference(eastWestPosition) > 0
 
     def isPositionMaxUp(self):
-        return float(self.getPitch(self.pitchEntityId)) < PITCH_MIN
+        return float(self.getPitch(self.pitchEntityId)) < Constants.Pitch.MIN
 
     def isPositionMaxDown(self):
-        return float(self.getPitch(self.pitchEntityId)) > PITCH_MAX
+        return float(self.getPitch(self.pitchEntityId)) > Constants.Pitch.MAX
 
     def isPositionMaxEast(self):
-        return float(self.getRoll(self.rollEntityId)) > ROLL_MAX
+        return float(self.getRoll(self.rollEntityId)) > Constants.Roll.MAX
 
     def isPositionMaxWest(self):
-        return float(self.getRoll(self.rollEntityId)) < ROLL_MIN
+        return float(self.getRoll(self.rollEntityId)) < Constants.Roll.MIN
 
     def getPitchDifference(self, upDownPosition):
         if UpDownPosition.MinimizeDifference == upDownPosition:
             wantedPosition = float(self.getSunElevation())
         elif UpDownPosition.Protect == upDownPosition:
-            wantedPosition = PITCH_MAX
+            wantedPosition = Constants.Pitch.MAX
 
-        wantedPosition = clamp(wantedPosition, PITCH_MIN, PITCH_MAX)
+        wantedPosition = clamp(wantedPosition, Constants.Pitch.MIN, Constants.Pitch.MAX)
         pitch = 90 - float(self.getPitch(self.pitchEntityId))
         difference = wantedPosition - pitch
         self.hass.log("Diff=wantedPosition-Pitch: {:.2f}={:.2f}-{:.2f}".format(difference, wantedPosition, pitch))
@@ -209,12 +189,10 @@ class SolarController:
     def getRollDifference(self, eastWestPosition):
         if EastWestPosition.MinimizeDifference == eastWestPosition:
             wantedPosition = - (float(self.getSunAzimuth()) - 180)
-            self.hass.log("Move to E/W difference {:.2f}".format(wantedPosition))
         elif EastWestPosition.Protect == eastWestPosition:
             wantedPosition = 0
-            self.hass.log("Move to protect")
 
-        wantedPosition = clamp(wantedPosition, ROLL_MIN, ROLL_MAX)
+        wantedPosition = clamp(wantedPosition, Constants.Roll.MIN, Constants.Roll.MAX)
         roll = float(self.getRoll(self.rollEntityId))
         difference = wantedPosition - roll
         self.hass.log("Diff=wantedPosition-Roll: {:.2f}={:.2f}-{:.2f}".format(difference, wantedPosition, roll))
@@ -233,8 +211,7 @@ class SolarController:
         status = self.getStatus(self.statusEntityId)
 
         if self.isSolarControllerConnected(status):
-            timeout = TIMEOUT
-            updatePeriod = 1 # s
+            timeout = Constants.TIMEOUT
 
             while self.isPitchDifferenceTooHigh(upDownPosition) and timeout > 0:
                 currentPitchDifference = self.getPitchDifference(upDownPosition)
@@ -243,10 +220,10 @@ class SolarController:
                     self.hass.log("U/D Position is steady")
                     break
 
-                control = self.pidController.update(measurement=currentPitchDifference, dt=updatePeriod)
-                speed = SPEED_MAX
-                if (abs(control) < PID_CONTROLLER_THRESHOLD):
-                    speed = abs(control/PID_CONTROLLER_THRESHOLD) * SPEED_DIFFERENCE_MAX_WITHIN_THRESHOLD + SPEED_MIN
+                control = self.pidController.update(measurement=currentPitchDifference, dt=Constants.PIDController.UPDATE_PERIOD)
+                speed = Constants.Speed.MAX
+                if (abs(control) < Constants.PIDController.THRESHOLD):
+                    speed = abs(control/Constants.PIDController.THRESHOLD) * Constants.Speed.DIFFERENCE_MAX_WITHIN_THRESHOLD + Constants.Speed.MIN
 
                 if self.isPositionTooLow(upDownPosition) and self.isUpMovementAllowed(upDownPosition):
                     if (self.isPositionMaxUp()):
@@ -260,14 +237,14 @@ class SolarController:
                         break
                     self.switchOnDown()
                     self.hass.log("Move down")
-                    speed = speed * SPEED_DOWN_FACTOR
+                    speed = speed * Constants.Speed.DOWN_FACTOR
                 else:
                     self.hass.log("U/D Position settled")
                     break
 
                 self.setUpDownSpeed(speed)
 
-                time.sleep(updatePeriod)
+                time.sleep(Constants.PIDController.UPDATE_PERIOD)
                 timeout = timeout - 1
 
             self.switchOffUp()
@@ -288,8 +265,7 @@ class SolarController:
         status = self.getStatus(self.statusEntityId)
 
         if self.isSolarControllerConnected(status):
-            timeout = TIMEOUT
-            updatePeriod = 1 # s
+            timeout = Constants.TIMEOUT
 
             while self.isRollDifferenceTooHigh(eastWestPosition) and timeout > 0:
                 currentRollDifference = self.getRollDifference(eastWestPosition)
@@ -298,10 +274,10 @@ class SolarController:
                     self.hass.log("E/W Position is steady")
                     break
 
-                control = self.pidController.update(measurement=currentRollDifference, dt=updatePeriod)
-                speed = SPEED_MAX
-                if (abs(control) < PID_CONTROLLER_THRESHOLD):
-                   speed = abs(control/PID_CONTROLLER_THRESHOLD) * SPEED_DIFFERENCE_MAX_WITHIN_THRESHOLD + SPEED_MIN
+                control = self.pidController.update(measurement=currentRollDifference, dt=Constants.PIDController.UPDATE_PERIOD)
+                speed = Constants.Speed.MAX
+                if (abs(control) < Constants.PIDController.THRESHOLD):
+                   speed = abs(control/Constants.PIDController.THRESHOLD) * Constants.Speed.DIFFERENCE_MAX_WITHIN_THRESHOLD + Constants.Speed.MIN
 
                 if self.isPositionTooEast(eastWestPosition) and self.isWestMovementAllowed(eastWestPosition):
                     if self.isPositionMaxWest():
@@ -309,7 +285,7 @@ class SolarController:
                         break
                     self.switchOnWest()
                     self.hass.log("Move west")
-                    speed = speed * SPEED_WEST_FACTOR
+                    speed = speed * Constants.Speed.WEST_FACTOR
                 elif self.isPositionTooWest(eastWestPosition) and self.isEastMovementAllowed(eastWestPosition):
                     if self.isPositionMaxEast():
                         self.hass.log("Position is East at maximum")
@@ -322,7 +298,7 @@ class SolarController:
 
                 self.setEastWestSpeed(speed)
 
-                time.sleep(updatePeriod)
+                time.sleep(Constants.PIDController.UPDATE_PERIOD)
                 timeout = timeout - 1
 
             self.switchOffEast()

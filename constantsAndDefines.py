@@ -1,9 +1,40 @@
 from enum import IntEnum
 
-class UpDownPosition(IntEnum):
+class Constants():
+    TIMEOUT = 90
+    DEVICE_NAME_PREFIX = "esp32_solar_control_"
+
+    class Pitch():
+        MAX = 64 # Down
+        MIN = 27 # Up
+        DIFFERENCE_MAX = MAX - MIN
+
+    class Roll():
+        MAX = 34  # East
+        MIN = -19 # West
+        DIFFERENCE_MAX = MAX - MIN
+
+    class Speed():
+        DOWN_FACTOR = 0.85
+        WEST_FACTOR = 1.1
+        MAX = 70
+        MIN = 45
+        DIFFERENCE_MAX = MAX - MIN
+        MAX_WITHIN_THRESHOLD = 55
+        DIFFERENCE_MAX_WITHIN_THRESHOLD = MAX_WITHIN_THRESHOLD - MIN
+
+    class PIDController():
+        THRESHOLD = 15
+        UPDATE_PERIOD = 1 # s
+
+class ControllerID():
+    ONE_AXIS_ID = "1_axis"
+    TWO_AXIS_ID = "2_axis"
+
+class EastWestPosition(IntEnum):
     MinimizeDifference = 0
     Protect            = 1
-    
-class EastWestPosition(IntEnum):
+
+class UpDownPosition(IntEnum):
     MinimizeDifference = 0
     Protect            = 1
