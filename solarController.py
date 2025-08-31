@@ -100,24 +100,24 @@ class SolarController:
 
     def isUpMovementAllowed(self, upDownPosition):
         if UpDownPosition.Protect == upDownPosition:
-            return true
+            return True
         else:
             return self.isBeforeNoon()
 
     def isDownMovementAllowed(self, upDownPosition):
         if UpDownPosition.Protect == upDownPosition:
-            return true
+            return True
         else:
             return not self.isBeforeNoon()
 
     def isEastMovementAllowed(self, eastWestPosition):
         if EastWestPosition.Protect == eastWestPosition:
-            return true
+            return True
         else:
-            return false
+            return False
 
     def isWestMovementAllowed(self, eastWestPosition):
-        return true
+        return True
 
     def switchOnUp(self):
         if self.hass.get_state(self.switchUpEntityId) == "off":
