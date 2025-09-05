@@ -269,8 +269,6 @@ class SolarController:
                 time.sleep(Constants.PIDController.UPDATE_PERIOD)
                 timeout = timeout - 1
 
-            self.switchOffUp()
-            self.switchOffDown()
             self.setUpDownSpeed(0)
 
             if timeout != 0:
@@ -330,8 +328,6 @@ class SolarController:
                 time.sleep(Constants.PIDController.UPDATE_PERIOD)
                 timeout = timeout - 1
 
-            self.switchOffEast()
-            self.switchOffWest()
             self.setEastWestSpeed(0)
 
             if timeout != 0:
