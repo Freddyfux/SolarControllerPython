@@ -17,6 +17,7 @@ def clamp(n, minn, maxn):
 class SolarController:
     def __init__(self, hass):
         self.hass = hass
+        self.controllerName = None
         self.controllerEntityIdBase = None
         self.automaticSolarControllerEntityId = None
         self.statusEntityId = None
@@ -38,6 +39,7 @@ class SolarController:
 
     def setSolarControllerEntityID(self, controllerName):
         if controllerName == ControllerID.ONE_AXIS_ID or controllerName == ControllerID.TWO_AXIS_ID:
+            self.controllerName = controllerName
             self.controllerEntityIdBase = Constants.DEVICE_NAME_PREFIX + controllerName
             self.automaticSolarControllerEntityId = "input_boolean." + controllerName + "_automatic_solar_controller"
             self.statusEntityId = "binary_sensor." + self.controllerEntityIdBase + "_status"
@@ -49,11 +51,26 @@ class SolarController:
             self.switchWestEntityId   = "switch." + self.controllerEntityIdBase + "_west"
             self.lightSpeedUpDownEntityId = "light." + self.controllerEntityIdBase + "_speed_up_down"
             self.lightSpeedEastWestEntityId = "light." + self.controllerEntityIdBase + "_speed_east_west"
+            self.pitchMaximas = Constants.Pitch(controllerName)
+
+            self.hass.log(f"Got:")
+            self.hass.log(f" - controllerName: {self.controllerName}")
+            self.hass.log(f" - pitch:")
+            self.hass.log(f"   - MAX     : {self.pitchMaximas.MAX}")
+            self.hass.log(f"   - MIN     : {self.pitchMaximas.MIN}")
+            self.hass.log(f"   - Current : {self.getPitch()}")
+            self.hass.log(f" - roll:")
+            self.hass.log(f"   - MAX     : {Constants.Roll.MAX}")
+            self.hass.log(f"   - MIN     : {Constants.Roll.MIN}")
+            self.hass.log(f"   - Current : {self.getRoll()}")
         else:
             self.hass.log(f"Solar controller {controllerName} is not valid")
 
-    def isSolarControllerConnected(self, status):
-        if status == 'on':
+    def is1AxisSolarControl(self):
+        return self.controllerName == ControllerID.ONE_AXIS_ID
+
+    def isSolarControllerConnected(self):
+        if self.getStatus() == 'on':
             return True
         else:
             return False
@@ -179,10 +196,10 @@ class SolarController:
         return self.getRollDifference(eastWestPosition) > 0
 
     def isPositionMaxUp(self):
-        return float(self.getPitch()) < Constants.Pitch.MIN
+        return float(self.getPitch()) < self.pitchMaximas.MIN
 
     def isPositionMaxDown(self):
-        return float(self.getPitch()) > Constants.Pitch.MAX
+        return float(self.getPitch()) > self.pitchMaximas.MAX
 
     def isPositionMaxEast(self):
         return float(self.getRoll()) > Constants.Roll.MAX
@@ -194,12 +211,18 @@ class SolarController:
         if UpDownPosition.MinimizeDifference == upDownPosition:
             wantedPosition = float(self.getSunElevation())
         elif UpDownPosition.Protect == upDownPosition:
-            wantedPosition = Constants.Pitch.MAX
+            if self.is1AxisSolarControl():
+                wantedPosition = self.pitchMaximas.MIN
+            else:
+                wantedPosition = self.pitchMaximas.MAX
 
-        wantedPosition = clamp(wantedPosition, Constants.Pitch.MIN, Constants.Pitch.MAX)
-        pitch = 90 - float(self.getPitch())
+        wantedPosition = clamp(wantedPosition, self.pitchMaximas.MIN, self.pitchMaximas.MAX)
+        if self.is1AxisSolarControl():
+            pitch = float(self.getPitch())
+        else:
+            pitch = 90 - float(self.getPitch())
         difference = wantedPosition - pitch
-        #self.hass.log("Diff=wantedPosition-Pitch: {:.2f}={:.2f}-{:.2f}".format(difference, wantedPosition, pitch))
+        self.hass.log("Diff=wantedPosition-Pitch: {:.2f}={:.2f}-{:.2f}".format(difference, wantedPosition, pitch))
 
         return difference
 
@@ -225,9 +248,8 @@ class SolarController:
     def moveUpDown(self, controllerName, upDownPosition):
 
         self.setSolarControllerEntityID(controllerName)
-        status = self.getStatus()
 
-        if self.isSolarControllerConnected(status):
+        if self.isSolarControllerConnected():
             timeout = Constants.TIMEOUT
 
             self.automaticSolarControllerState = self.getAutomaticSolarController()
@@ -279,14 +301,17 @@ class SolarController:
             if self.automaticSolarControllerState == "on":
                 self.switchOnAutomaticSolarController()
         else:
-            self.hass.log(f"Solar controller {solar_controller_name} is {solar_controller_status_state}")
+            self.hass.log(f"Solar controller {controllerName} is {self.getStatus()}")
 
     def moveEastWest(self, controllerName, eastWestPosition):
 
-        self.setSolarControllerEntityID(controllerName)
-        status = self.getStatus()
+        if controllerName == ControllerID.ONE_AXIS_ID:
+            self.hass.log(f"Solar controller {controllerName} East/West movement isn't available")
+            return
 
-        if self.isSolarControllerConnected(status):
+        self.setSolarControllerEntityID(controllerName)
+
+        if self.isSolarControllerConnected():
             timeout = Constants.TIMEOUT
 
             self.automaticSolarControllerState = self.getAutomaticSolarController()
@@ -339,4 +364,4 @@ class SolarController:
                 self.switchOnAutomaticSolarController()
 
         else:
-            self.hass.log(f"Solar controller {solar_controller_name} is {solar_controller_status_state}")
+            self.hass.log(f"Solar controller {controllerName} is {self.getStatus()}")
