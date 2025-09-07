@@ -184,10 +184,16 @@ class SolarController:
         self.hass.call_service("light/turn_on", entity_id=self.lightSpeedEastWestEntityId, brightness=speed)
 
     def isPositionTooLow(self, upDownPosition):
-        return self.getPitchDifference(upDownPosition) > 0
+        if self.is1AxisSolarControl():
+            return self.getPitchDifference(upDownPosition) < 0
+        else:
+            return self.getPitchDifference(upDownPosition) > 0
 
     def isPositionTooHigh(self, upDownPosition):
-        return self.getPitchDifference(upDownPosition) < 0
+        if self.is1AxisSolarControl():
+            return self.getPitchDifference(upDownPosition) > 0
+        else:
+            return self.getPitchDifference(upDownPosition) < 0
 
     def isPositionTooEast(self, eastWestPosition):
         return self.getRollDifference(eastWestPosition) < 0
@@ -217,10 +223,7 @@ class SolarController:
                 wantedPosition = self.pitchMaximas.MAX
 
         wantedPosition = clamp(wantedPosition, self.pitchMaximas.MIN, self.pitchMaximas.MAX)
-        if self.is1AxisSolarControl():
-            pitch = float(self.getPitch())
-        else:
-            pitch = 90 - float(self.getPitch())
+        pitch = 90 - float(self.getPitch())
         difference = wantedPosition - pitch
         self.hass.log("Diff=wantedPosition-Pitch: {:.2f}={:.2f}-{:.2f}".format(difference, wantedPosition, pitch))
 
