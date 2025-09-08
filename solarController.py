@@ -107,13 +107,19 @@ class SolarController:
         if UpDownPosition.Protect == self.upDownPosition:
             return True
         else:
-            return self.isBeforeNoon()
+            if self.is1AxisSolarControl():
+                return not self.isBeforeNoon()
+            else:
+                return self.isBeforeNoon()
 
     def isDownMovementAllowed(self):
         if UpDownPosition.Protect == self.upDownPosition:
             return True
         else:
-            return not self.isBeforeNoon()
+            if self.is1AxisSolarControl():
+                return self.isBeforeNoon()
+            else:
+                return not self.isBeforeNoon()
 
     def isEastMovementAllowed(self, eastWestPosition):
         if EastWestPosition.Protect == eastWestPosition:
@@ -186,15 +192,15 @@ class SolarController:
 
     def isPositionTooLow(self):
         if self.is1AxisSolarControl():
-            return self.getPitchDifference(self.upDownPosition) < 0
+            return self.getPitchDifference() < 0
         else:
-            return self.getPitchDifference(self.upDownPosition) > 0
+            return self.getPitchDifference() > 0
 
     def isPositionTooHigh(self):
         if self.is1AxisSolarControl():
-            return self.getPitchDifference(self.upDownPosition) > 0
+            return self.getPitchDifference() > 0
         else:
-            return self.getPitchDifference(self.upDownPosition) < 0
+            return self.getPitchDifference() < 0
 
     def isPositionTooEast(self, eastWestPosition):
         return self.getRollDifference(eastWestPosition) < 0
@@ -203,10 +209,16 @@ class SolarController:
         return self.getRollDifference(eastWestPosition) > 0
 
     def isPositionMaxUp(self):
-        return float(self.getPitch()) < self.pitchMaximas.MIN
+        if self.is1AxisSolarControl():
+            return float(self.getPitch()) > self.pitchMaximas.MAX
+        else:
+            return float(self.getPitch()) < self.pitchMaximas.MIN
 
     def isPositionMaxDown(self):
-        return float(self.getPitch()) > self.pitchMaximas.MAX
+        if self.is1AxisSolarControl():
+            return float(self.getPitch()) < self.pitchMaximas.MIN
+        else:
+            return float(self.getPitch()) > self.pitchMaximas.MAX
 
     def isPositionMaxEast(self):
         return float(self.getRoll()) > Constants.Roll.MAX
@@ -220,10 +232,11 @@ class SolarController:
         elif UpDownPosition.Protect == self.upDownPosition:
             if self.is1AxisSolarControl():
                 wantedPosition = self.pitchMaximas.MIN
+                wantedPosition = clamp(wantedPosition, self.pitchMaximas.MAX, self.pitchMaximas.MIN)
             else:
                 wantedPosition = self.pitchMaximas.MAX
+                wantedPosition = clamp(wantedPosition, self.pitchMaximas.MIN, self.pitchMaximas.MAX)
 
-        wantedPosition = clamp(wantedPosition, self.pitchMaximas.MIN, self.pitchMaximas.MAX)
         pitch = 90 - float(self.getPitch())
         difference = wantedPosition - pitch
         self.hass.log("Diff=wantedPosition-Pitch: {:.2f}={:.2f}-{:.2f}".format(difference, wantedPosition, pitch))
