@@ -27,9 +27,9 @@ class Constants():
         DOWN_FACTOR = 0.85
         WEST_FACTOR = 1.1
         MAX = 70
-        MIN = 45
+        MIN = 43
         DIFFERENCE_MAX = MAX - MIN
-        MAX_WITHIN_THRESHOLD = 55
+        MAX_WITHIN_THRESHOLD = 53
         DIFFERENCE_MAX_WITHIN_THRESHOLD = MAX_WITHIN_THRESHOLD - MIN
 
     class PIDController():
