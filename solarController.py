@@ -106,6 +106,8 @@ class SolarController:
     def isUpMovementAllowed(self):
         if UpDownPosition.Protect == self.upDownPosition:
             return True
+        elif self.isPitchDifferenceFarTooHigh():
+            return True
         else:
             if self.is1AxisSolarControl():
                 return not self.isBeforeNoon()
@@ -114,6 +116,8 @@ class SolarController:
 
     def isDownMovementAllowed(self):
         if UpDownPosition.Protect == self.upDownPosition:
+            return True
+        elif self.isRollDifferenceFarTooHigh():
             return True
         else:
             if self.is1AxisSolarControl():
@@ -261,6 +265,12 @@ class SolarController:
 
     def isRollDifferenceTooHigh(self, eastWestPosition):
         return math.fabs(self.getRollDifference(eastWestPosition)) > 1
+
+    def isPitchDifferenceFarTooHigh(self):
+        return math.fabs(self.getPitchDifference()) > 6
+
+    def isRollDifferenceFarTooHigh(self, eastWestPosition):
+        return math.fabs(self.getRollDifference(eastWestPosition)) > 6
 
     def moveUpDown(self, controllerName, upDownPosition):
 
