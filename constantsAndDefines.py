@@ -7,8 +7,8 @@ class Constants():
     class Pitch():
         def __init__(self, controller):
             if controller == ControllerID.ONE_AXIS_ID:
-                self.MAX = 78 # Up
-                self.MIN = 22 # Down
+                self.MAX = 78 # Down
+                self.MIN = 22 # Up
                 self.DIFFERENCE_MAX = self.MAX - self.MIN
             elif controller == ControllerID.TWO_AXIS_ID:
                 self.MAX = 64 # Down
@@ -27,9 +27,9 @@ class Constants():
         DOWN_FACTOR = 0.85
         WEST_FACTOR = 1.1
         MAX = 70
-        MIN = 45
+        MIN = 43
         DIFFERENCE_MAX = MAX - MIN
-        MAX_WITHIN_THRESHOLD = 55
+        MAX_WITHIN_THRESHOLD = 53
         DIFFERENCE_MAX_WITHIN_THRESHOLD = MAX_WITHIN_THRESHOLD - MIN
 
     class PIDController():
