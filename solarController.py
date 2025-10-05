@@ -117,7 +117,7 @@ class SolarController:
     def isDownMovementAllowed(self):
         if UpDownPosition.Protect == self.upDownPosition:
             return True
-        elif self.isRollDifferenceFarTooHigh():
+        elif self.isPitchDifferenceFarTooHigh():
             return True
         else:
             if self.is1AxisSolarControl():
@@ -127,6 +127,8 @@ class SolarController:
 
     def isEastMovementAllowed(self, eastWestPosition):
         if EastWestPosition.Protect == eastWestPosition:
+            return True
+        elif self.isRollDifferenceFarTooHigh(eastWestPosition):
             return True
         else:
             return False
