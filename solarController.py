@@ -51,7 +51,7 @@ class SolarController:
             self.lightSpeedEastWestEntityId = "light." + self.controllerEntityIdBase + "_speed_east_west"
             self.pitchMaximas = Constants.Pitch(controllerName)
 
-            self.compensateUpDownPosition = CompensatePosition(pitchMaximas.MIN, pitchMaximas.MAX)
+            self.compensateUpDownPosition = CompensatePosition(self.pitchMaximas.MIN, self.pitchMaximas.MAX)
 
             self.hass.log(f"Got:")
             self.hass.log(f" - controllerName: {self.controllerName}")
@@ -278,7 +278,7 @@ class SolarController:
                 control = self.pidController.update(measurement=currentPitchDifference, dt=Constants.PIDController.UPDATE_PERIOD)
                 speed = Constants.Speed.MAX
                 if (abs(control) < Constants.PIDController.THRESHOLD):
-                    speed = abs(control/Constants.PIDController.THRESHOLD) * Constants.Speed.DIFFERENCE_MAX_WITHIN_THRESHOLD * compensateUpDownPosition.compensate(self.getPitch()) + Constants.Speed.MIN
+                    speed = abs(control/Constants.PIDController.THRESHOLD) * Constants.Speed.DIFFERENCE_MAX_WITHIN_THRESHOLD * self.compensateUpDownPosition.compensate(self.getPitch()) + Constants.Speed.MIN
 
                 if self.isPositionTooLow() and self.isUpMovementAllowed():
                     if (self.isPositionMaxUp()):
