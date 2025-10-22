@@ -2,11 +2,11 @@ import math
 
 class CompensatePosition:
     def __init__(self, in_min=30, in_max=70, out_min=1.0, out_max=1.5, aggressiveness=3):
-        self.in_min = in_min
-        self.in_max = in_max
-        self.out_min = out_min
-        self.out_max = out_max
-        self.aggressiveness = aggressiveness
+        self.in_min = float(in_min)
+        self.in_max = float(in_max)
+        self.out_min = float(out_min)
+        self.out_max = float(out_max)
+        self.aggressiveness = float(aggressiveness)
 
     def compensate(self, x):
         """
@@ -24,7 +24,7 @@ class CompensatePosition:
             float: Mapped output value.
         """
         # Clamp x to the input range
-        x_clamped = max(min(x, self.in_max), self.in_min)
+        x_clamped = max(min(float(x), self.in_max), self.in_min)
 
         # Normalize x to [0, 1]
         t = (x_clamped - self.in_min) / (self.in_max - self.in_min)
