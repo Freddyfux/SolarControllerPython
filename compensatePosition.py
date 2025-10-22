@@ -1,6 +1,6 @@
 import math
 
-class CompensatePosition():
+class CompensatePosition:
     def __init__(self, in_min=30, in_max=70, out_min=1.0, out_max=1.5, aggressiveness=3):
         self.in_min = in_min
         self.in_max = in_max
