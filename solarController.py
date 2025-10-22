@@ -7,7 +7,7 @@ from constantsAndDefines import (
     Constants,
     ControllerID
 )
-
+from compensatePosition import CompensatePosition
 from pidController import PIDController
 from steadyState import SteadyState
 
@@ -32,6 +32,7 @@ class SolarController:
 
         self.pidController = PIDController(Kp=1.0, Ki=0.0, Kd=0.0, setpoint=0)
 
+        self.compensateUpDownPosition = None
         self.pitchSteadyState = SteadyState()
         self.rollSteadyState = SteadyState()
 
@@ -49,6 +50,8 @@ class SolarController:
             self.lightSpeedUpDownEntityId = "light." + self.controllerEntityIdBase + "_speed_up_down"
             self.lightSpeedEastWestEntityId = "light." + self.controllerEntityIdBase + "_speed_east_west"
             self.pitchMaximas = Constants.Pitch(controllerName)
+
+            self.compensateUpDownPosition = CompensatePosition(pitchMaximas.MIN, pitchMaximas.MAX)
 
             self.hass.log(f"Got:")
             self.hass.log(f" - controllerName: {self.controllerName}")
@@ -275,7 +278,7 @@ class SolarController:
                 control = self.pidController.update(measurement=currentPitchDifference, dt=Constants.PIDController.UPDATE_PERIOD)
                 speed = Constants.Speed.MAX
                 if (abs(control) < Constants.PIDController.THRESHOLD):
-                    speed = abs(control/Constants.PIDController.THRESHOLD) * Constants.Speed.DIFFERENCE_MAX_WITHIN_THRESHOLD + Constants.Speed.MIN
+                    speed = abs(control/Constants.PIDController.THRESHOLD) * Constants.Speed.DIFFERENCE_MAX_WITHIN_THRESHOLD * compensateUpDownPosition.compensate(self.getPitch()) + Constants.Speed.MIN
 
                 if self.isPositionTooLow() and self.isUpMovementAllowed():
                     if (self.isPositionMaxUp()):
