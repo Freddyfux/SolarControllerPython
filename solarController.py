@@ -282,7 +282,7 @@ class SolarController:
         else:
             self.hass.log(f"{controller_name} timeout diff={diff:.2f}")
     
-        def moveUpDown(self, controllerName, upDownPosition):
+    def moveUpDown(self, controllerName, upDownPosition):
 
         self.setSolarControllerEntityID(controllerName)
         self.upDownPosition = upDownPosition
