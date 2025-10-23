@@ -267,6 +267,10 @@ class SolarController:
         self.setSolarControllerEntityID(controllerName)
         self.upDownPosition = upDownPosition
 
+        actionMessage = ""
+        message = ""
+        printedDirection = False
+
         if self.isSolarControllerConnected():
             timeout = Constants.TIMEOUT
 
@@ -274,8 +278,10 @@ class SolarController:
                 currentPitchDifference = self.getPitchDifference()
 
                 if (self.pitchSteadyState.addValue(currentPitchDifference)):
-                    self.hass.log("U/D Position is steady")
-                    self.printAction("U/D Position is steady")
+                    message = "U/D Position is steady. "
+                    self.hass.log(message)
+                    actionMessage = actionMessage + message
+                    self.printAction(actionMessage)
                     break
 
                 control = self.pidController.update(measurement=currentPitchDifference, dt=Constants.PIDController.UPDATE_PERIOD)
@@ -285,24 +291,38 @@ class SolarController:
 
                 if self.isPositionTooLow() and self.isUpMovementAllowed():
                     if (self.isPositionMaxUp()):
-                        self.hass.log("Position is up at maximum")
-                        self.printAction("Position is up at maximum")
+                        message = "Position is up at maximum. "
+                        self.hass.log(message)
+                        actionMessage = actionMessage + message
+                        self.printAction(actionMessage)
                         break
                     self.switchOnUp()
-                    self.hass.log("Move up")
-                    self.printAction("Move up")
+                    message = "Moving up ... "
+                    self.hass.log(message)
+                    if printedDirection == False:
+                        actionMessage = actionMessage + message
+                        self.printAction(actionMessage)
+                        printedDirection = True
                 elif self.isPositionTooHigh() and not self.isPositionMaxDown() and self.isDownMovementAllowed():
                     if (self.isPositionMaxDown()):
-                        self.hass.log("Position is down at maximum")
-                        self.printAction("Position is down at maximum")
+                        message = "Position is down at maximum. "
+                        self.hass.log(message)
+                        actionMessage = actionMessage + message
+                        self.printAction(actionMessage)
                         break
                     self.switchOnDown()
-                    self.hass.log("Move down")
-                    self.printAction("Move down")
+                    message = "Moving down ... "
+                    self.hass.log(message)
+                    if printedDirection == False:
+                        actionMessage = actionMessage + message
+                        self.printAction(actionMessage)
+                        printedDirection = True
                     speed = speed * Constants.Speed.DOWN_FACTOR
                 else:
-                    self.hass.log("U/D Position settled")
-                    self.printAction("U/D Position settled")
+                    message = "U/D Position settled. "
+                    self.hass.log(message)
+                    actionMessage = actionMessage + message
+                    self.printAction(actionMessage)
                     break
 
                 self.hass.log(f"Speed {speed}")
@@ -315,8 +335,12 @@ class SolarController:
 
             if timeout != 0:
                 self.hass.log("{} pitch is justified diff={:.2f}".format(controllerName, self.getPitchDifference()))
+                message = "DONE"
             else:
                 self.hass.log("{} timeout diff={:.2f}".format(controllerName, self.getPitchDifference()))
+                message = "DONE with timeout"
+            actionMessage = actionMessage + message
+            self.printAction(actionMessage)
 
         else:
             self.hass.log(f"Solar controller {controllerName} is {self.getStatus()}")
@@ -329,6 +353,10 @@ class SolarController:
 
         self.setSolarControllerEntityID(controllerName)
 
+        actionMessage = ""
+        message = ""
+        printedDirection = False
+
         if self.isSolarControllerConnected():
             timeout = Constants.TIMEOUT
 
@@ -336,8 +364,10 @@ class SolarController:
                 currentRollDifference = self.getRollDifference(eastWestPosition)
 
                 if (self.rollSteadyState.addValue(currentRollDifference)):
-                    self.hass.log("E/W Position is steady")
-                    self.printAction("E/W Position is steady")
+                    message = "E/W Position is steady. "
+                    self.hass.log(message)
+                    actionMessage = actionMessage + message
+                    self.printAction(actionMessage)
                     break
 
                 control = self.pidController.update(measurement=currentRollDifference, dt=Constants.PIDController.UPDATE_PERIOD)
@@ -347,24 +377,38 @@ class SolarController:
 
                 if self.isPositionTooEast(eastWestPosition) and self.isWestMovementAllowed(eastWestPosition):
                     if self.isPositionMaxWest():
-                        self.hass.log("Position is West at maximum")
-                        self.printAction("Position is West at maximum")
+                        message = "Position is West at maximum. "
+                        self.hass.log(message)
+                        actionMessage = actionMessage + message
+                        self.printAction(actionMessage)
                         break
                     self.switchOnWest()
-                    self.hass.log("Move west")
-                    self.printAction("Move west")
+                    message = "Moving west ... "
+                    self.hass.log(message)
+                    if printedDirection == False:
+                        actionMessage = actionMessage + message
+                        self.printAction(actionMessage)
+                        printedDirection = True
                     speed = speed * Constants.Speed.WEST_FACTOR
                 elif self.isPositionTooWest(eastWestPosition) and self.isEastMovementAllowed(eastWestPosition):
                     if self.isPositionMaxEast():
-                        self.hass.log("Position is East at maximum")
-                        self.printAction("Position is East at maximum")
+                        message = "Position is East at maximum. "
+                        self.hass.log(message)
+                        actionMessage = actionMessage + message
+                        self.printAction(actionMessage)
                         break
                     self.switchOnEast()
-                    self.hass.log("Move east")
-                    self.printAction("Move east")
+                    message = "Moving east ... "
+                    self.hass.log(message)
+                    if printedDirection == False:
+                        actionMessage = actionMessage + message
+                        self.printAction(actionMessage)
+                        printedDirection = True
                 else:
-                    self.hass.log("E/W Position settled")
-                    self.printAction("E/W Position settled")
+                    message = "E/W Position settled. "
+                    self.hass.log(message)
+                    actionMessage = actionMessage + message
+                    self.printAction(actionMessage)
                     break
 
                 self.hass.log(f"Speed {speed}")
@@ -377,8 +421,12 @@ class SolarController:
 
             if timeout != 0:
                 self.hass.log("{} roll is justified diff={:.2f}".format(controllerName, self.getRollDifference(eastWestPosition)))
+                message = "DONE"
             else:
                 self.hass.log("{} timeout diff={:.2f}".format(controllerName, self.getRollDifference(eastWestPosition)))
+                message = "DONE with timeout"
+            actionMessage = actionMessage + message
+            self.printAction(actionMessage)
 
         else:
             self.hass.log(f"Solar controller {controllerName} is {self.getStatus()}")
