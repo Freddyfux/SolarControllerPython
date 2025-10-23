@@ -6,6 +6,10 @@ class SteadyState:
         self.tolerance = tolerance
         self.buffer = deque(maxlen=size)
 
+    def reset(self):
+        """Clear the buffer and reset the state."""
+        self.buffer.clear()
+
     def addValue(self, value: float):
         """Add a new float value and perform the tolerance check."""
         self.buffer.append(value)
