@@ -28,6 +28,7 @@ class SolarController:
         self.switchWestEntityId = None
         self.lightSpeedUpDownEntityId = None
         self.lightSpeedEastWestEntityId = None
+        self.actionStateId = None
         self.upDownPosition = None
 
         self.pidController = PIDController(Kp=1.0, Ki=0.0, Kd=0.0, setpoint=0)
@@ -48,6 +49,7 @@ class SolarController:
             self.switchWestEntityId   = "switch." + self.controllerEntityIdBase + "_west"
             self.lightSpeedUpDownEntityId = "light." + self.controllerEntityIdBase + "_speed_up_down"
             self.lightSpeedEastWestEntityId = "light." + self.controllerEntityIdBase + "_speed_east_west"
+            self.actionStateId = "input_text." + self.controllerEntityIdBase + "_action_state"
             self.pitchMaximas = Constants.Pitch(controllerName)
 
             self.hass.log(f"Got:")
@@ -257,6 +259,9 @@ class SolarController:
     def isRollDifferenceFarTooHigh(self, eastWestPosition):
         return math.fabs(self.getRollDifference(eastWestPosition)) > 6
 
+    def printAction(self, msg):
+        self.hass.call_service("input_text/set_value", entity_id=actionStateId, value=msg)
+
     def moveUpDown(self, controllerName, upDownPosition):
 
         self.setSolarControllerEntityID(controllerName)
@@ -270,6 +275,7 @@ class SolarController:
 
                 if (self.pitchSteadyState.addValue(currentPitchDifference)):
                     self.hass.log("U/D Position is steady")
+                    self.printAction("U/D Position is steady")
                     break
 
                 control = self.pidController.update(measurement=currentPitchDifference, dt=Constants.PIDController.UPDATE_PERIOD)
@@ -280,18 +286,23 @@ class SolarController:
                 if self.isPositionTooLow() and self.isUpMovementAllowed():
                     if (self.isPositionMaxUp()):
                         self.hass.log("Position is up at maximum")
+                        self.printAction("Position is up at maximum")
                         break
                     self.switchOnUp()
                     self.hass.log("Move up")
+                    self.printAction("Move up")
                 elif self.isPositionTooHigh() and not self.isPositionMaxDown() and self.isDownMovementAllowed():
                     if (self.isPositionMaxDown()):
                         self.hass.log("Position is down at maximum")
+                        self.printAction("Position is down at maximum")
                         break
                     self.switchOnDown()
                     self.hass.log("Move down")
+                    self.printAction("Move down")
                     speed = speed * Constants.Speed.DOWN_FACTOR
                 else:
                     self.hass.log("U/D Position settled")
+                    self.printAction("U/D Position settled")
                     break
 
                 self.hass.log(f"Speed {speed}")
@@ -326,6 +337,7 @@ class SolarController:
 
                 if (self.rollSteadyState.addValue(currentRollDifference)):
                     self.hass.log("E/W Position is steady")
+                    self.printAction("E/W Position is steady")
                     break
 
                 control = self.pidController.update(measurement=currentRollDifference, dt=Constants.PIDController.UPDATE_PERIOD)
@@ -336,18 +348,23 @@ class SolarController:
                 if self.isPositionTooEast(eastWestPosition) and self.isWestMovementAllowed(eastWestPosition):
                     if self.isPositionMaxWest():
                         self.hass.log("Position is West at maximum")
+                        self.printAction("Position is West at maximum")
                         break
                     self.switchOnWest()
                     self.hass.log("Move west")
+                    self.printAction("Move west")
                     speed = speed * Constants.Speed.WEST_FACTOR
                 elif self.isPositionTooWest(eastWestPosition) and self.isEastMovementAllowed(eastWestPosition):
                     if self.isPositionMaxEast():
                         self.hass.log("Position is East at maximum")
+                        self.printAction("Position is East at maximum")
                         break
                     self.switchOnEast()
                     self.hass.log("Move east")
+                    self.printAction("Move east")
                 else:
                     self.hass.log("E/W Position settled")
+                    self.printAction("E/W Position settled")
                     break
 
                 self.hass.log(f"Speed {speed}")
