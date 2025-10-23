@@ -87,10 +87,16 @@ class SolarController:
         return self.getQuantity(self.statusEntityId)
 
     def getPitch(self):
-        return self.getQuantity(self.pitchEntityId)
+        pitch = self.getQuantity(self.pitchEntityId)
+        if not pitch.isdigit():
+            raise TypeError("Pitch isn't a number")
+        return float(pitch)
 
     def getRoll(self):
-        return self.getQuantity(self.rollEntityId)
+        roll = self.getQuantity(self.rollEntityId)
+        if not roll.isdigit():
+            raise TypeError("Roll isn't a number")
+        return float(roll)
 
     def getSunElevation(self):
         return self.getQuantity("sensor.sun_elevation")
@@ -204,21 +210,21 @@ class SolarController:
 
     def isPositionMaxUp(self):
         if self.is1AxisSolarControl():
-            return float(self.getPitch()) > self.pitchMaximas.MAX
+            return self.getPitch() > self.pitchMaximas.MAX
         else:
-            return float(self.getPitch()) < self.pitchMaximas.MIN
+            return self.getPitch() < self.pitchMaximas.MIN
 
     def isPositionMaxDown(self):
         if self.is1AxisSolarControl():
-            return float(self.getPitch()) < self.pitchMaximas.MIN
+            return self.getPitch() < self.pitchMaximas.MIN
         else:
-            return float(self.getPitch()) > self.pitchMaximas.MAX
+            return self.getPitch() > self.pitchMaximas.MAX
 
     def isPositionMaxEast(self):
-        return float(self.getRoll()) > Constants.Roll.MAX
+        return self.getRoll() > Constants.Roll.MAX
 
     def isPositionMaxWest(self):
-        return float(self.getRoll()) < Constants.Roll.MIN
+        return self.getRoll() < Constants.Roll.MIN
 
     def getPitchDifference(self):
         if UpDownPosition.MinimizeDifference == self.upDownPosition:
@@ -231,7 +237,7 @@ class SolarController:
                 wantedPosition = self.pitchMaximas.MAX
                 wantedPosition = clamp(wantedPosition, self.pitchMaximas.MIN, self.pitchMaximas.MAX)
 
-        pitch = 90 - float(self.getPitch())
+        pitch = 90 - self.getPitch()
         difference = wantedPosition - pitch
         #self.hass.log("Diff=wantedPosition-Pitch: {:.2f}={:.2f}-{:.2f}".format(difference, wantedPosition, pitch))
 
@@ -244,7 +250,7 @@ class SolarController:
             wantedPosition = 0
 
         wantedPosition = clamp(wantedPosition, Constants.Roll.MIN, Constants.Roll.MAX)
-        roll = float(self.getRoll())
+        roll = self.getRoll()
         difference = wantedPosition - roll
         #self.hass.log("Diff=wantedPosition-Roll: {:.2f}={:.2f}-{:.2f}".format(difference, wantedPosition, roll))
 
@@ -265,7 +271,7 @@ class SolarController:
     def logDifference(self, controller_name, timeout, axis, *args):
         """
         Logs either pitch or roll difference depending on the axis.
-    
+
         Parameters:
             controller_name (str): Name of the controller
             timeout (int): Timeout value (0 or non-zero)
@@ -278,7 +284,7 @@ class SolarController:
             diff = self.getRollDifference(*args)
         else:
             raise ValueError(f"Unknown axis: {axis}")
-    
+
         if timeout != 0:
             self.hass.log(f"{controller_name} {axis} is justified diff={diff:.2f}")
         else:
