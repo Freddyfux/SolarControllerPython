@@ -260,7 +260,7 @@ class SolarController:
         return math.fabs(self.getRollDifference(eastWestPosition)) > 6
 
     def printAction(self, msg):
-        self.hass.call_service("input_text/set_value", entity_id=actionStateId, value=msg)
+        self.hass.call_service("input_text/set_value", entity_id=self.actionStateId, value=msg)
 
     def moveUpDown(self, controllerName, upDownPosition):
 
