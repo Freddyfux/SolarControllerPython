@@ -266,7 +266,7 @@ class SolarController:
 
         self.setSolarControllerEntityID(controllerName)
         self.upDownPosition = upDownPosition
-        pitchSteadyState.reset()
+        self.pitchSteadyState.reset()
 
         actionMessage = ""
         message = ""
@@ -353,7 +353,7 @@ class SolarController:
             return
 
         self.setSolarControllerEntityID(controllerName)
-        rollSteadyState.reset()
+        self.rollSteadyState.reset()
 
         actionMessage = ""
         message = ""
