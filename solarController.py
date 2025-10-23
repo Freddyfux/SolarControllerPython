@@ -87,16 +87,12 @@ class SolarController:
         return self.getQuantity(self.statusEntityId)
 
     def getPitch(self):
-        pitch = self.getQuantity(self.pitchEntityId)
-        if not pitch.isdigit():
-            raise TypeError("Pitch isn't a number")
-        return float(pitch)
+        pitch = float(self.getQuantity(self.pitchEntityId))
+        return pitch
 
     def getRoll(self):
-        roll = self.getQuantity(self.rollEntityId)
-        if not roll.isdigit():
-            raise TypeError("Roll isn't a number")
-        return float(roll)
+        roll = float(self.getQuantity(self.rollEntityId))
+        return roll
 
     def getSunElevation(self):
         return self.getQuantity("sensor.sun_elevation")
@@ -374,8 +370,8 @@ class SolarController:
             else:
                 self.hass.log(f"Solar controller {controllerName} is {self.getStatus()}")
 
-        except TypeError as te:
-            print("TypeError:", te)
+        except ValueError as ve:
+            print("ValueError:", ve)
         except:
             print("Unknown error occurred")
 
@@ -463,7 +459,7 @@ class SolarController:
             else:
                 self.hass.log(f"Solar controller {controllerName} is {self.getStatus()}")
 
-        except TypeError as te:
-            print("TypeError:", te)
+        except ValueError as ve:
+            print("ValueError:", ve)
         except:
             print("Unknown error occurred")
