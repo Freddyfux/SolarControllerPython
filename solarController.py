@@ -231,7 +231,7 @@ class SolarController:
 
         pitch = 90 - float(self.getPitch())
         difference = wantedPosition - pitch
-        self.hass.log("Diff=wantedPosition-Pitch: {:.2f}={:.2f}-{:.2f}".format(difference, wantedPosition, pitch))
+        #self.hass.log("Diff=wantedPosition-Pitch: {:.2f}={:.2f}-{:.2f}".format(difference, wantedPosition, pitch))
 
         return difference
 
@@ -260,7 +260,29 @@ class SolarController:
     def isRollDifferenceFarTooHigh(self, eastWestPosition):
         return math.fabs(self.getRollDifference(eastWestPosition)) > 6
 
-    def moveUpDown(self, controllerName, upDownPosition):
+    def logDifference(self, controller_name, timeout, axis, *args):
+        """
+        Logs either pitch or roll difference depending on the axis.
+    
+        Parameters:
+            controller_name (str): Name of the controller
+            timeout (int): Timeout value (0 or non-zero)
+            axis (str): Either 'pitch' or 'roll'
+            *args: Extra arguments to pass to the difference function (e.g., eastWestPosition)
+        """
+        if axis == "pitch":
+            diff = self.getPitchDifference(*args)
+        elif axis == "roll":
+            diff = self.getRollDifference(*args)
+        else:
+            raise ValueError(f"Unknown axis: {axis}")
+    
+        if timeout != 0:
+            self.hass.log(f"{controller_name} {axis} is justified diff={diff:.2f}")
+        else:
+            self.hass.log(f"{controller_name} timeout diff={diff:.2f}")
+    
+        def moveUpDown(self, controllerName, upDownPosition):
 
         self.setSolarControllerEntityID(controllerName)
         self.upDownPosition = upDownPosition
@@ -305,10 +327,7 @@ class SolarController:
 
             self.setUpDownSpeed(0)
 
-            if timeout != 0:
-                self.hass.log("{} pitch is justified diff={:.2f}".format(controllerName, self.getPitchDifference()))
-            else:
-                self.hass.log("{} timeout diff={:.2f}".format(controllerName, self.getPitchDifference()))
+            self.logDifference(controllerName, timeout, "pitch")
 
         else:
             self.hass.log(f"Solar controller {controllerName} is {self.getStatus()}")
@@ -361,10 +380,7 @@ class SolarController:
 
             self.setEastWestSpeed(0)
 
-            if timeout != 0:
-                self.hass.log("{} roll is justified diff={:.2f}".format(controllerName, self.getRollDifference(eastWestPosition)))
-            else:
-                self.hass.log("{} timeout diff={:.2f}".format(controllerName, self.getRollDifference(eastWestPosition)))
+            self.logDifference(controllerName, timeout, "roll", eastWestPosition)
 
         else:
             self.hass.log(f"Solar controller {controllerName} is {self.getStatus()}")
