@@ -7,7 +7,7 @@ from constantsAndDefines import (
     Constants,
     ControllerID
 )
-
+from compensatePosition import CompensatePosition
 from pidController import PIDController
 from steadyState import SteadyState
 
@@ -33,6 +33,7 @@ class SolarController:
 
         self.pidController = PIDController(Kp=1.0, Ki=0.0, Kd=0.0, setpoint=0)
 
+        self.compensateUpDownPosition = None
         self.pitchSteadyState = SteadyState()
         self.rollSteadyState = SteadyState()
 
@@ -51,6 +52,8 @@ class SolarController:
             self.lightSpeedEastWestEntityId = "light." + self.controllerEntityIdBase + "_speed_east_west"
             self.actionStateId = "input_text." + self.controllerEntityIdBase + "_action_state"
             self.pitchMaximas = Constants.Pitch(controllerName)
+
+            self.compensateUpDownPosition = CompensatePosition(self.pitchMaximas.MIN, self.pitchMaximas.MAX)
 
             self.hass.log(f"Got:")
             self.hass.log(f" - controllerName: {self.controllerName}")
@@ -84,10 +87,12 @@ class SolarController:
         return self.getQuantity(self.statusEntityId)
 
     def getPitch(self):
-        return self.getQuantity(self.pitchEntityId)
+        pitch = float(self.getQuantity(self.pitchEntityId))
+        return pitch
 
     def getRoll(self):
-        return self.getQuantity(self.rollEntityId)
+        roll = float(self.getQuantity(self.rollEntityId))
+        return roll
 
     def getSunElevation(self):
         return self.getQuantity("sensor.sun_elevation")
@@ -201,21 +206,21 @@ class SolarController:
 
     def isPositionMaxUp(self):
         if self.is1AxisSolarControl():
-            return float(self.getPitch()) > self.pitchMaximas.MAX
+            return self.getPitch() > self.pitchMaximas.MAX
         else:
-            return float(self.getPitch()) < self.pitchMaximas.MIN
+            return self.getPitch() < self.pitchMaximas.MIN
 
     def isPositionMaxDown(self):
         if self.is1AxisSolarControl():
-            return float(self.getPitch()) < self.pitchMaximas.MIN
+            return self.getPitch() < self.pitchMaximas.MIN
         else:
-            return float(self.getPitch()) > self.pitchMaximas.MAX
+            return self.getPitch() > self.pitchMaximas.MAX
 
     def isPositionMaxEast(self):
-        return float(self.getRoll()) > Constants.Roll.MAX
+        return self.getRoll() > Constants.Roll.MAX
 
     def isPositionMaxWest(self):
-        return float(self.getRoll()) < Constants.Roll.MIN
+        return self.getRoll() < Constants.Roll.MIN
 
     def getPitchDifference(self):
         if UpDownPosition.MinimizeDifference == self.upDownPosition:
@@ -228,9 +233,9 @@ class SolarController:
                 wantedPosition = self.pitchMaximas.MAX
                 wantedPosition = clamp(wantedPosition, self.pitchMaximas.MIN, self.pitchMaximas.MAX)
 
-        pitch = 90 - float(self.getPitch())
+        pitch = 90 - self.getPitch()
         difference = wantedPosition - pitch
-        self.hass.log("Diff=wantedPosition-Pitch: {:.2f}={:.2f}-{:.2f}".format(difference, wantedPosition, pitch))
+        #self.hass.log("Diff=wantedPosition-Pitch: {:.2f}={:.2f}-{:.2f}".format(difference, wantedPosition, pitch))
 
         return difference
 
@@ -241,7 +246,7 @@ class SolarController:
             wantedPosition = 0
 
         wantedPosition = clamp(wantedPosition, Constants.Roll.MIN, Constants.Roll.MAX)
-        roll = float(self.getRoll())
+        roll = self.getRoll()
         difference = wantedPosition - roll
         #self.hass.log("Diff=wantedPosition-Roll: {:.2f}={:.2f}-{:.2f}".format(difference, wantedPosition, roll))
 
@@ -259,176 +264,202 @@ class SolarController:
     def isRollDifferenceFarTooHigh(self, eastWestPosition):
         return math.fabs(self.getRollDifference(eastWestPosition)) > 6
 
+    def logDifference(self, controller_name, timeout, axis, *args):
+        """
+        Logs either pitch or roll difference depending on the axis.
+
+        Parameters:
+            controller_name (str): Name of the controller
+            timeout (int): Timeout value (0 or non-zero)
+            axis (str): Either 'pitch' or 'roll'
+            *args: Extra arguments to pass to the difference function (e.g., eastWestPosition)
+        """
+        if axis == "pitch":
+            diff = self.getPitchDifference(*args)
+        elif axis == "roll":
+            diff = self.getRollDifference(*args)
+        else:
+            raise ValueError(f"Unknown axis: {axis}")
+
+        if timeout != 0:
+            self.hass.log(f"{controller_name} {axis} is justified diff={diff:.2f}")
+        else:
+            self.hass.log(f"{controller_name} timeout diff={diff:.2f}")
+
     def printAction(self, msg):
         self.hass.call_service("input_text/set_value", entity_id=self.actionStateId, value=msg)
 
     def moveUpDown(self, controllerName, upDownPosition):
 
-        self.setSolarControllerEntityID(controllerName)
-        self.upDownPosition = upDownPosition
-        self.pitchSteadyState.reset()
+        try:
+            self.setSolarControllerEntityID(controllerName)
+            self.upDownPosition = upDownPosition
+            self.pitchSteadyState.reset()
 
-        actionMessage = ""
-        message = ""
-        printedDirection = False
+            actionMessage = ""
+            message = ""
+            printedDirection = False
 
-        if self.isSolarControllerConnected():
-            timeout = Constants.TIMEOUT
+            if self.isSolarControllerConnected():
+                timeout = Constants.TIMEOUT
 
-            while self.isPitchDifferenceTooHigh() and timeout > 0:
-                currentPitchDifference = self.getPitchDifference()
+                while self.isPitchDifferenceTooHigh() and timeout > 0:
+                    currentPitchDifference = self.getPitchDifference()
 
-                if (self.pitchSteadyState.addValue(currentPitchDifference)):
-                    message = "U/D Position is steady. "
-                    self.hass.log(message)
-                    actionMessage = actionMessage + message
-                    self.printAction(actionMessage)
-                    break
-
-                control = self.pidController.update(measurement=currentPitchDifference, dt=Constants.PIDController.UPDATE_PERIOD)
-                speed = Constants.Speed.MAX
-                if (abs(control) < Constants.PIDController.THRESHOLD):
-                    speed = abs(control/Constants.PIDController.THRESHOLD) * Constants.Speed.DIFFERENCE_MAX_WITHIN_THRESHOLD + Constants.Speed.MIN
-
-                if self.isPositionTooLow() and self.isUpMovementAllowed():
-                    if (self.isPositionMaxUp()):
-                        message = "Position is up at maximum. "
+                    if (self.pitchSteadyState.addValue(currentPitchDifference)):
+                        message = "U/D Position is steady. "
                         self.hass.log(message)
                         actionMessage = actionMessage + message
                         self.printAction(actionMessage)
                         break
-                    self.switchOnUp()
-                    message = "Moving up ... "
-                    self.hass.log(message)
-                    if printedDirection == False:
-                        actionMessage = actionMessage + message
-                        self.printAction(actionMessage)
-                        printedDirection = True
-                elif self.isPositionTooHigh() and not self.isPositionMaxDown() and self.isDownMovementAllowed():
-                    if (self.isPositionMaxDown()):
-                        message = "Position is down at maximum. "
+
+                    control = self.pidController.update(measurement=currentPitchDifference, dt=Constants.PIDController.UPDATE_PERIOD)
+                    speed = Constants.Speed.MAX
+                    if (abs(control) < Constants.PIDController.THRESHOLD):
+                        speed = abs(control/Constants.PIDController.THRESHOLD) * Constants.Speed.DIFFERENCE_MAX_WITHIN_THRESHOLD * self.compensateUpDownPosition.compensate(self.getPitch()) + Constants.Speed.MIN
+
+                    if self.isPositionTooLow() and self.isUpMovementAllowed():
+                        if (self.isPositionMaxUp()):
+                            message = "Position is up at maximum. "
+                            self.hass.log(message)
+                            actionMessage = actionMessage + message
+                            self.printAction(actionMessage)
+                            break
+                        self.switchOnUp()
+                        message = "Moving up ... "
+                        self.hass.log(message)
+                        if printedDirection == False:
+                            actionMessage = actionMessage + message
+                            self.printAction(actionMessage)
+                            printedDirection = True
+                    elif self.isPositionTooHigh() and not self.isPositionMaxDown() and self.isDownMovementAllowed():
+                        if (self.isPositionMaxDown()):
+                            message = "Position is down at maximum. "
+                            self.hass.log(message)
+                            actionMessage = actionMessage + message
+                            self.printAction(actionMessage)
+                            break
+                        self.switchOnDown()
+                        message = "Moving down ... "
+                        self.hass.log(message)
+                        if printedDirection == False:
+                            actionMessage = actionMessage + message
+                            self.printAction(actionMessage)
+                            printedDirection = True
+                        speed = speed * Constants.Speed.DOWN_FACTOR
+                    else:
+                        message = "U/D Position settled. "
                         self.hass.log(message)
                         actionMessage = actionMessage + message
                         self.printAction(actionMessage)
                         break
-                    self.switchOnDown()
-                    message = "Moving down ... "
-                    self.hass.log(message)
-                    if printedDirection == False:
-                        actionMessage = actionMessage + message
-                        self.printAction(actionMessage)
-                        printedDirection = True
-                    speed = speed * Constants.Speed.DOWN_FACTOR
-                else:
-                    message = "U/D Position settled. "
-                    self.hass.log(message)
-                    actionMessage = actionMessage + message
-                    self.printAction(actionMessage)
-                    break
 
-                self.hass.log(f"Speed {speed}")
-                self.setUpDownSpeed(speed)
+                    self.hass.log(f"Speed {speed}")
+                    self.setUpDownSpeed(speed)
 
-                time.sleep(Constants.PIDController.UPDATE_PERIOD)
-                timeout = timeout - 1
+                    time.sleep(Constants.PIDController.UPDATE_PERIOD)
+                    timeout = timeout - 1
 
-            self.setUpDownSpeed(0)
+                self.setUpDownSpeed(0)
 
-            if timeout != 0:
-                self.hass.log("{} pitch is justified diff={:.2f}".format(controllerName, self.getPitchDifference()))
+                self.logDifference(controllerName, timeout, "pitch")
                 message = "DONE"
-            else:
-                self.hass.log("{} timeout diff={:.2f}".format(controllerName, self.getPitchDifference()))
-                message = "DONE with timeout"
-            actionMessage = actionMessage + message
-            self.printAction(actionMessage)
+                actionMessage = actionMessage + message
+                self.printAction(actionMessage)
 
-        else:
-            self.hass.log(f"Solar controller {controllerName} is {self.getStatus()}")
+            else:
+                self.hass.log(f"Solar controller {controllerName} is {self.getStatus()}")
+
+        except ValueError as ve:
+            print("ValueError:", ve)
+        except:
+            print("Unknown error occurred")
 
     def moveEastWest(self, controllerName, eastWestPosition):
 
-        if controllerName == ControllerID.ONE_AXIS_ID:
-            self.hass.log(f"Solar controller {controllerName} East/West movement isn't available")
-            return
+        try:
+            if controllerName == ControllerID.ONE_AXIS_ID:
+                self.hass.log(f"Solar controller {controllerName} East/West movement isn't available")
+                return
 
-        self.setSolarControllerEntityID(controllerName)
-        self.rollSteadyState.reset()
+            self.setSolarControllerEntityID(controllerName)
+            self.rollSteadyState.reset()
 
-        actionMessage = ""
-        message = ""
-        printedDirection = False
+            actionMessage = ""
+            message = ""
+            printedDirection = False
 
-        if self.isSolarControllerConnected():
-            timeout = Constants.TIMEOUT
+            if self.isSolarControllerConnected():
+                timeout = Constants.TIMEOUT
 
-            while self.isRollDifferenceTooHigh(eastWestPosition) and timeout > 0:
-                currentRollDifference = self.getRollDifference(eastWestPosition)
+                while self.isRollDifferenceTooHigh(eastWestPosition) and timeout > 0:
+                    currentRollDifference = self.getRollDifference(eastWestPosition)
 
-                if (self.rollSteadyState.addValue(currentRollDifference)):
-                    message = "E/W Position is steady. "
-                    self.hass.log(message)
-                    actionMessage = actionMessage + message
-                    self.printAction(actionMessage)
-                    break
-
-                control = self.pidController.update(measurement=currentRollDifference, dt=Constants.PIDController.UPDATE_PERIOD)
-                speed = Constants.Speed.MAX
-                if (abs(control) < Constants.PIDController.THRESHOLD):
-                   speed = abs(control/Constants.PIDController.THRESHOLD) * Constants.Speed.DIFFERENCE_MAX_WITHIN_THRESHOLD + Constants.Speed.MIN
-
-                if self.isPositionTooEast(eastWestPosition) and self.isWestMovementAllowed(eastWestPosition):
-                    if self.isPositionMaxWest():
-                        message = "Position is West at maximum. "
+                    if (self.rollSteadyState.addValue(currentRollDifference)):
+                        message = "E/W Position is steady. "
                         self.hass.log(message)
                         actionMessage = actionMessage + message
                         self.printAction(actionMessage)
                         break
-                    self.switchOnWest()
-                    message = "Moving west ... "
-                    self.hass.log(message)
-                    if printedDirection == False:
-                        actionMessage = actionMessage + message
-                        self.printAction(actionMessage)
-                        printedDirection = True
-                    speed = speed * Constants.Speed.WEST_FACTOR
-                elif self.isPositionTooWest(eastWestPosition) and self.isEastMovementAllowed(eastWestPosition):
-                    if self.isPositionMaxEast():
-                        message = "Position is East at maximum. "
+
+                    control = self.pidController.update(measurement=currentRollDifference, dt=Constants.PIDController.UPDATE_PERIOD)
+                    speed = Constants.Speed.MAX
+                    if (abs(control) < Constants.PIDController.THRESHOLD):
+                       speed = abs(control/Constants.PIDController.THRESHOLD) * Constants.Speed.DIFFERENCE_MAX_WITHIN_THRESHOLD + Constants.Speed.MIN
+
+                    if self.isPositionTooEast(eastWestPosition) and self.isWestMovementAllowed(eastWestPosition):
+                        if self.isPositionMaxWest():
+                            message = "Position is West at maximum. "
+                            self.hass.log(message)
+                            actionMessage = actionMessage + message
+                            self.printAction(actionMessage)
+                            break
+                        self.switchOnWest()
+                        message = "Moving west ... "
+                        self.hass.log(message)
+                        if printedDirection == False:
+                            actionMessage = actionMessage + message
+                            self.printAction(actionMessage)
+                            printedDirection = True
+                        speed = speed * Constants.Speed.WEST_FACTOR
+                    elif self.isPositionTooWest(eastWestPosition) and self.isEastMovementAllowed(eastWestPosition):
+                        if self.isPositionMaxEast():
+                            message = "Position is East at maximum. "
+                            self.hass.log(message)
+                            actionMessage = actionMessage + message
+                            self.printAction(actionMessage)
+                            break
+                        self.switchOnEast()
+                        message = "Moving east ... "
+                        self.hass.log(message)
+                        if printedDirection == False:
+                            actionMessage = actionMessage + message
+                            self.printAction(actionMessage)
+                            printedDirection = True
+                    else:
+                        message = "E/W Position settled. "
                         self.hass.log(message)
                         actionMessage = actionMessage + message
                         self.printAction(actionMessage)
                         break
-                    self.switchOnEast()
-                    message = "Moving east ... "
-                    self.hass.log(message)
-                    if printedDirection == False:
-                        actionMessage = actionMessage + message
-                        self.printAction(actionMessage)
-                        printedDirection = True
-                else:
-                    message = "E/W Position settled. "
-                    self.hass.log(message)
-                    actionMessage = actionMessage + message
-                    self.printAction(actionMessage)
-                    break
 
-                self.hass.log(f"Speed {speed}")
-                self.setEastWestSpeed(speed)
+                    self.hass.log(f"Speed {speed}")
+                    self.setEastWestSpeed(speed)
 
-                time.sleep(Constants.PIDController.UPDATE_PERIOD)
-                timeout = timeout - 1
+                    time.sleep(Constants.PIDController.UPDATE_PERIOD)
+                    timeout = timeout - 1
 
-            self.setEastWestSpeed(0)
+                self.setEastWestSpeed(0)
 
-            if timeout != 0:
-                self.hass.log("{} roll is justified diff={:.2f}".format(controllerName, self.getRollDifference(eastWestPosition)))
+                self.logDifference(controllerName, timeout, "roll", eastWestPosition)
                 message = "DONE"
-            else:
-                self.hass.log("{} timeout diff={:.2f}".format(controllerName, self.getRollDifference(eastWestPosition)))
-                message = "DONE with timeout"
-            actionMessage = actionMessage + message
-            self.printAction(actionMessage)
+                actionMessage = actionMessage + message
+                self.printAction(actionMessage)
 
-        else:
-            self.hass.log(f"Solar controller {controllerName} is {self.getStatus()}")
+            else:
+                self.hass.log(f"Solar controller {controllerName} is {self.getStatus()}")
+
+        except ValueError as ve:
+            print("ValueError:", ve)
+        except:
+            print("Unknown error occurred")
